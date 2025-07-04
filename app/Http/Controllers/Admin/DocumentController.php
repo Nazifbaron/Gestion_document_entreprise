@@ -1,0 +1,343 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use App\Models\Folder;
+use App\Models\Document;
+use App\Models\DocumentVersion;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use App\Notifications\NouveauDocumentAjoute;
+use App\Models\User;
+use App\Notifications\DocumentEnAttenteValidation;
+use App\Notifications\DocumentRejete;
+
+class DocumentController extends Controller
+{
+    use AuthorizesRequests;
+
+    public function index(Request $request)
+    {
+        
+        $query = Document::query()->with('folder');
+
+        // 👇 Filtrage automatique selon le rôle
+        if (auth()->user()->hasRole('employe')) {
+            $query->where('user_id', auth()->id());
+        }
+
+        // 🔍 Filtres (recherche, dossier, etc.)
+        if ($request->filled('titre')) {
+            $query->where('title', 'like', '%' . $request->titre . '%');
+        }
+
+        if ($request->filled('folder_id')) {
+            $query->where('folder_id', $request->folder_id);
+        }
+
+        $documents = $query->latest()->paginate(10);
+        $folders = Folder::all();
+
+        return view('admin.documents.index', compact('documents', 'folders'));
+    }
+
+
+    public function create()
+    {
+            
+        $folders = Folder::all();
+        return view('admin.documents.create', compact('folders'));
+    }
+
+    
+    public function store(Request $request, Document $document)
+    {
+        
+
+        $request->validate([
+            'title' => 'required|string',
+            'description' => 'nullable|string',
+            'type' => 'required|string',
+            'folder_id' => 'required|exists:folders,id',
+            'file' => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,jpg,png,jpeg,odt',
+        ]);
+
+        $path = $request->file('file')->store('documents');
+        $status = auth()->user()->hasRole(['admin', 'responsable']) ? 'validé' : 'en attente';
+
+
+        Document::create([
+            'title' => $request->title,
+            'description' => $request->description,
+            'type' => $request->type,
+            'folder_id' => $request->folder_id,
+            'user_id' => auth()->id(),
+            'file_path' => $path,
+            'status' => $status,
+        ]);
+
+            $document->load('user'); // 🔥 Charge la relation user une seule fois
+            // 🔔 Notifier les administrateurs et/ou responsables
+            $admins = User::role(['admin', 'responsable'])->get(); // nécessite Spatie
+
+            foreach ($admins as $admin) {
+                $admin->notify(new NouveauDocumentAjoute($document));
+                 }
+
+                 if (!auth()->user()->hasRole(['admin', 'responsable'])) {
+                    foreach ($admins as $admin) {
+                        $admin->notify(new DocumentEnAttenteValidation($document));
+                    }
+                }
+                
+        return redirect()->route('admin.documents.index')->with('success', 'Document ajouté avec succès.');
+    }
+
+    
+    public function edit(Document $document)
+    {
+        /*accès interdit au utilisateur au role d'employer
+        if (auth()->user()->hasRole('employe') && $document->user_id !== auth()->id()) {
+            abort(403, 'Accès interdit');
+        }*/
+        $this->authorize('update', $document);
+
+        $folders = Folder::all(); // pour la liste déroulante
+        return view('admin.documents.edit', compact('document', 'folders'));
+    }
+
+
+
+    public function update(Request $request, Document $document)
+    {
+        if (auth()->user()->hasRole('employe') && $document->user_id !== auth()->id()) {
+            abort(403, 'Accès interdit');
+        }
+
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'type' => 'required|string|max:255',
+            'folder_id' => 'required|exists:folders,id',
+            'file' => 'nullable|file|max:20480', // 20MB max
+        ]);
+
+
+    $document->title = $validated['title'];
+    $document->type = $validated['type'];
+    $document->folder_id = $validated['folder_id'];
+            // 👇 Sauvegarder l'ancienne version si un nouveau fichier est envoyé
+        if ($request->hasFile('file')) {
+            $oldPath = $document->file_path;
+
+            // Enregistrer l'ancienne version dans versions/
+            $versionNumber = $document->versions()->count() + 1;
+            $versionPath = 'versions/' . basename($oldPath);
+            Storage::copy($oldPath, $versionPath);
+
+            $document->versions()->create([
+                'file_path' => $versionPath,
+                'version_number' => $versionNumber,
+            ]);
+
+                // Stocker le nouveau
+                $path = $request->file('file')->store('documents');
+            $document->file_path = $path;
+        }
+
+       
+        $document->save();
+
+        return redirect()->route('admin.documents.index')->with('success', 'Document mis à jour avec version sauvegardée.');
+    }
+
+   
+    public function destroy(Document $document)
+    {
+        /*if (auth()->user()->hasRole('employe') && $document->user_id !== auth()->id()) {
+            abort(403, 'Accès interdit');
+        }*/
+        $this->authorize('delete', $document);
+        // Supprimer le fichier dans le dossier storage/app/public/documents
+        if ($document->file_path && Storage::exists($document->file_path)) {
+            Storage::delete($document->file_path);
+        }
+
+        $document->delete();
+
+        return redirect()->route('admin.documents.index')->with('success', 'Document supprimé avec succès.');
+    }
+
+
+    public function telecharger(Document $document)
+    {
+        /*if (auth()->user()->hasRole('employe') && $document->user_id !== auth()->id()) {
+            abort(403, 'Accès interdit');
+        }*/
+        $this->authorize('view', $document);
+
+        // Chemin complet vers le fichier
+        $chemin = storage_path('app/public/' . $document->file_path);
+       
+        // Vérifie que le fichier existe
+        if (!file_exists($chemin)) {
+            abort(404, 'Fichier introuvable');
+        }
+
+        // Téléchargement avec le vrai nom du fichier
+        return response()->download($chemin, $document->title . '.' . pathinfo($chemin, PATHINFO_EXTENSION));
+    }
+  
+    public function statistiques(Document $document)
+    {
+        $this->authorize('view', $document);
+        $totalDocuments = Document::count();
+        $totalFolders = Folder::count();
+
+        // Documents par dossier
+        $documentsParDossier = Folder::withCount('documents')->get();
+
+        // Documents par extension (pdf, odt, etc.)
+        $extensions = Document::selectRaw("SUBSTRING_INDEX(file_path, '.', -1) as extension, COUNT(*) as total")
+            ->groupBy('extension')
+            ->get();
+
+        return view('admin.documents.stats', compact(
+            'totalDocuments',
+            'totalFolders',
+            'documentsParDossier',
+            'extensions'
+        ));
+    }
+    
+   
+
+public function exportPdf(Request $request)
+{
+    $query = Document::with(['folder', 'user']);
+
+    if (auth()->user()->hasRole('employe')) {
+        $query->where('user_id', auth()->id());
+    }
+
+    // Appliquer les mêmes filtres que la page index
+    if ($request->filled('titre')) {
+        $query->where('title', 'like', '%' . $request->titre . '%');
+    }
+
+    if ($request->filled('folder_id')) {
+        $query->where('folder_id', $request->folder_id);
+    }
+
+    $documents = $query->latest()->get();
+
+    $pdf = Pdf::loadView('admin.documents.pdf', compact('documents'));
+    return $pdf->download('documents-filtrés.pdf');
+}
+
+
+
+public function statsMois()
+{
+    $documentsParMois = Document::selectRaw('MONTH(created_at) as mois, COUNT(*) as total')
+        ->whereYear('created_at', now()->year)
+        ->groupBy('mois')
+        ->orderBy('mois')
+        ->get();
+
+    $labels = [];
+    $data = [];
+
+    foreach (range(1, 12) as $mois) {
+        $labels[] = Carbon::create()->month($mois)->locale('fr')->translatedFormat('F'); // "Janvier", etc.
+        $match = $documentsParMois->firstWhere('mois', $mois);
+        $data[] = $match ? $match->total : 0;
+    }
+
+    return view('admin.documents.stats_mois', compact('labels', 'data'));
+}
+
+    public function historique()
+    {
+        $logs = \Spatie\Activitylog\Models\Activity::latest()->paginate(20);
+        return view('admin.documents.historique', compact('logs'));
+    }
+
+    public function downloadVersion(DocumentVersion $version)
+    {
+        return Storage::download($version->file_path);
+    }
+
+    public function restoreVersion(DocumentVersion $version)
+    {
+        $document = $version->document;
+
+        if ($document->file_path !== $version->file_path) {
+            $currentPath = $document->file_path;
+            $nextVersion = $document->versions()->count() + 1;
+
+            Storage::copy($currentPath, 'versions/' . basename($currentPath));
+
+            $document->versions()->create([
+                'file_path' => 'versions/' . basename($currentPath),
+                'version_number' => $nextVersion,
+            ]);
+
+            // Restaurer
+            $document->update(['file_path' => $version->file_path]);
+        }
+
+        return back()->with('success', 'Version restaurée avec succès.');
+    }
+
+    public function deleteVersion(DocumentVersion $version)
+    {
+        // Supprimer le fichier stocké
+        if (Storage::exists($version->file_path)) {
+            Storage::delete($version->file_path);
+        }
+
+        // Supprimer l'enregistrement en base de données
+        $version->delete();
+
+        return back()->with('success', 'Version supprimée avec succès.');
+    }
+
+    // Affiche tous les documents en attente de validation
+    public function validationIndex()
+    {
+        $documents = Document::where('status', 'en_attente')->with('user')->latest()->get();
+
+        return view('admin.documents.validation', compact('documents'));
+    }
+
+    // Valider un document
+    public function valider(Document $document)
+    {
+        $document->update(['status' => 'valide']);
+        // Notifier l'employé ici si tu veux
+
+        return redirect()->route('admin.documents.validation.index')->with('success', 'Document validé');
+    }    
+
+    public function rejeter(Document $document)
+    {
+        $user = $document->user; // on sauvegarde l’utilisateur avant suppression
+        $titre = $document->title;
+
+        $document->delete();
+
+        $user->notify(new DocumentRejete($titre));
+        
+        return redirect()->route('admin.documents.validation.index')
+            ->with('error', 'Document supprimé après rejet.');
+        
+    }
+
+
+
+}
