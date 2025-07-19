@@ -3,11 +3,24 @@
         <h2 class="text-xl font-semibold">Liste des rôles</h2>
     </x-slot>
 
-    <div class="py-6">
+    <div class="py-6 px-2">
         <a href="{{ route('admin.roles.create') }}" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
             Ajouter un rôle
         </a>
 
+        @if(session('success'))
+            <script>
+                document.addEventListener('DOMContentLoaded',function(){
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Succès',
+                        text: '{{ session('success')}}',
+                        confirmButtonColor: '#3085d6',
+                        confirmButtonText: 'OK'
+                    })
+                });
+            </script>
+        @endif
         <table class="min-w-full mt-6 bg-white shadow rounded text-sm">
             <thead class="bg-gray-100">
                 <tr>

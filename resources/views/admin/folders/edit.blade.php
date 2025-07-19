@@ -3,7 +3,7 @@
         <h2 class="text-xl font-bold">Modifier le dossier</h2>
     </x-slot>
 
-    <div class="py-6 max-w-xl mx-auto bg-white shadow p-6 rounded">
+    <div class="py-6 max-w-xl mx-auto bg-white shadow p-6 rounded my-3">
         <form method="POST" action="{{ route('admin.folders.update', $folder) }}">
             @csrf
             @method('PUT')

@@ -13,6 +13,7 @@
 
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     </head>
     <body class="font-sans antialiased">
         <div class="min-h-screen bg-gray-100">
@@ -32,5 +33,32 @@
                 {{ $slot }}
             </main>
         </div>
+        <script>
+            document.addEventListener('DOMContentLoaded', function(){
+
+            const deleteForms = document.querySelectorAll('.delete-form');
+
+                deleteForms.forEach(form => {
+                    form.addEventListener('submit', function (e) {
+                        e.preventDefault();
+
+                        Swal.fire({
+                            title: 'Êtes-vous sûr ?',
+                            text: "Cette action est irréversible.",
+                            icon: 'warning',
+                            showCancelButton: true,
+                            confirmButtonColor:'#d33',
+                            cancelButtonColor: '#3085d6',
+                            confirmButtonText: 'Oui, Supprimer',
+                            cancelButtonText: 'Annuler'
+                        }).then((result)=> {
+                            if (result.isConfirmed) {
+                                form.submit();
+                            }
+                        });
+                    });
+                });
+            });  
+        </script>
     </body>
 </html>

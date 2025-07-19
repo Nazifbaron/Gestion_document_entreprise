@@ -1,9 +1,14 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-xl font-semibold">Modifier le rôle : {{ $role->name }}</h2>
+        <div class="flex justify-between ">
+            <h2 class="text-xl font-semibold">Modifier le rôle : {{ $role->name }}</h2>
+            <a href="{{ route('admin.roles.index') }}" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
+                    Accueil
+            </a>
+        </div>
     </x-slot>
 
-    <div class="py-6">
+    <div class="py-6 px-2">
         <form action="{{ route('admin.roles.update', $role) }}" method="POST" class="max-w-xl">
             @csrf
             @method('PUT')

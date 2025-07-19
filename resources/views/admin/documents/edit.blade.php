@@ -34,6 +34,17 @@
             </div>
 
             <div class="mb-4">
+                <label for="category_id" class="block font-semibold">Département</label>
+                <select name="category_id" id="category_id" class="w-full border rounded p-2 mt-1">
+                    @foreach($categories as $category)
+                        <option value="{{ $category->id }}" {{ $document->category_id == $category->id ? 'selected' : '' }}>
+                            {{ $category->name }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="mb-4">
                 <label for="file" class="block font-semibold">Remplacer le fichier (facultatif)</label>
                 <input type="file" name="file" id="file" class="w-full p-2 mt-1 border rounded">
                 <p class="text-sm text-gray-500 mt-1">Laisser vide pour ne pas changer le fichier actuel.</p>

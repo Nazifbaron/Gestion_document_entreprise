@@ -22,7 +22,7 @@ class FolderController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'name' => 'required|unique:folders,name',
+            'name' => 'required|unique:folders,name|min:3',
             'description' => 'nullable|string',
         ]);
 

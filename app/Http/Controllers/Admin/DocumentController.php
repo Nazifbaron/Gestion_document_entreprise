@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Category;
 use Illuminate\Http\Request;
 use App\Models\Folder;
 use App\Models\Document;
@@ -16,42 +17,68 @@ use App\Notifications\NouveauDocumentAjoute;
 use App\Models\User;
 use App\Notifications\DocumentEnAttenteValidation;
 use App\Notifications\DocumentRejete;
+use App\Notifications\DocumentPartage;
 
 class DocumentController extends Controller
 {
     use AuthorizesRequests;
 
+ 
+
     public function index(Request $request)
-    {
+{
+    
+    // 🔕 Marquer comme lues les notifs de partage
+    
         
-        $query = Document::query()->with('folder');
+    
+    $user = auth()->user();
 
-        // 👇 Filtrage automatique selon le rôle
-        if (auth()->user()->hasRole('employe')) {
-            $query->where('user_id', auth()->id());
-        }
+    $query = Document::query()->with(['folder', 'sharedWith','category']);
 
-        // 🔍 Filtres (recherche, dossier, etc.)
-        if ($request->filled('titre')) {
-            $query->where('title', 'like', '%' . $request->titre . '%');
-        }
-
-        if ($request->filled('folder_id')) {
-            $query->where('folder_id', $request->folder_id);
-        }
-
-        $documents = $query->latest()->paginate(10);
-        $folders = Folder::all();
-
-        return view('admin.documents.index', compact('documents', 'folders'));
+    // Filtrage par état d’archivage
+    if ($request->filled('archived')) {
+        $query->where('archived', $request->archived === '1');
+    } else {
+        $query->where('archived', false); // Par défaut, afficher seulement les documents non archivés
     }
+
+    // 🔍 Filtres (titre, dossier)
+    if ($request->filled('titre')) {
+        $query->where('title', 'like', '%' . $request->titre . '%');
+    }
+
+    if ($request->filled('folder_id')) {
+        $query->where('folder_id', $request->folder_id);
+    }
+
+    // 👥 Filtrage selon le rôle
+    if ($user->hasRole('employe')) {
+        $query->where(function ($q) use ($user) {
+            $q->where('user_id', $user->id)
+              ->orWhereHas('sharedWith', function ($sub) use ($user) {
+                  $sub->where('users.id', $user->id);
+              });
+        });
+    }
+
+    // 🔢 Pagination finale
+    $documents = $query->latest()->paginate(10);
+
+
+    $folders = Folder::all();
+    $users = User::where('id', '!=', $user->id)->get();
+
+    return view('admin.documents.index', compact('documents', 'folders', 'users'));
+}
 
 
     public function create()
     {
+        $categories = Category::all();
             
         $folders = Folder::all();
-        return view('admin.documents.create', compact('folders'));
+        return view('admin.documents.create', compact('folders','categories'));
     }
 
     
@@ -60,11 +87,12 @@ class DocumentController extends Controller
         
 
         $request->validate([
-            'title' => 'required|string',
+            'title' => 'required|string|min:4',
             'description' => 'nullable|string',
             'type' => 'required|string',
             'folder_id' => 'required|exists:folders,id',
             'file' => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,jpg,png,jpeg,odt',
+            'category_id' => 'required|exists:categories,id'
         ]);
 
         $path = $request->file('file')->store('documents');
@@ -79,6 +107,7 @@ class DocumentController extends Controller
             'user_id' => auth()->id(),
             'file_path' => $path,
             'status' => $status,
+            'category_id' => $request->category_id
         ]);
 
             $document->load('user'); // 🔥 Charge la relation user une seule fois
@@ -107,8 +136,9 @@ class DocumentController extends Controller
         }*/
         $this->authorize('update', $document);
 
+        $categories = Category::all();
         $folders = Folder::all(); // pour la liste déroulante
-        return view('admin.documents.edit', compact('document', 'folders'));
+        return view('admin.documents.edit', compact('document', 'folders','categories'));
     }
 
 
@@ -124,13 +154,15 @@ class DocumentController extends Controller
             'type' => 'required|string|max:255',
             'folder_id' => 'required|exists:folders,id',
             'file' => 'nullable|file|max:20480', // 20MB max
+            'category_id' => 'required|exists:categories,id',
         ]);
 
 
-    $document->title = $validated['title'];
-    $document->type = $validated['type'];
-    $document->folder_id = $validated['folder_id'];
-            // 👇 Sauvegarder l'ancienne version si un nouveau fichier est envoyé
+            $document->title = $validated['title'];
+            $document->type = $validated['type'];
+            $document->folder_id = $validated['folder_id'];
+            $document->category_id = $validated['category_id'];
+                    // 👇 Sauvegarder l'ancienne version si un nouveau fichier est envoyé
         if ($request->hasFile('file')) {
             $oldPath = $document->file_path;
 
@@ -152,6 +184,9 @@ class DocumentController extends Controller
        
         $document->save();
 
+
+    // 🔥 Partage aux utilisateurs sélectionnés
+    $document->sharedWith()->sync($request->input('shared_users', []));
         return redirect()->route('admin.documents.index')->with('success', 'Document mis à jour avec version sauvegardée.');
     }
 
@@ -162,6 +197,16 @@ class DocumentController extends Controller
             abort(403, 'Accès interdit');
         }*/
         $this->authorize('delete', $document);
+        activity()
+            ->performedOn($document)
+            ->causedBy(auth()->user())
+            ->withProperties([
+                'title' => $document->title,
+                'type' => $document->type,
+                'file_path' => $document->file_path,
+                
+            ])
+            ->log("Suppression du document : {$document->title}");
         // Supprimer le fichier dans le dossier storage/app/public/documents
         if ($document->file_path && Storage::exists($document->file_path)) {
             Storage::delete($document->file_path);
@@ -172,13 +217,21 @@ class DocumentController extends Controller
         return redirect()->route('admin.documents.index')->with('success', 'Document supprimé avec succès.');
     }
 
+    public function preview(Document $document)
+    {
+        // Génère l’URL publique vers le fichier (stocké dans storage/app/public)
+        $url = asset('storage/' . $document->file_path);
+
+        return view('admin.documents.preview', compact('document', 'url'));
+    }
+
 
     public function telecharger(Document $document)
     {
         /*if (auth()->user()->hasRole('employe') && $document->user_id !== auth()->id()) {
             abort(403, 'Accès interdit');
         }*/
-        $this->authorize('view', $document);
+      
 
         // Chemin complet vers le fichier
         $chemin = storage_path('app/public/' . $document->file_path);
@@ -197,6 +250,7 @@ class DocumentController extends Controller
         $this->authorize('view', $document);
         $totalDocuments = Document::count();
         $totalFolders = Folder::count();
+        $totalCategory = Category::count();
 
         // Documents par dossier
         $documentsParDossier = Folder::withCount('documents')->get();
@@ -338,6 +392,63 @@ public function statsMois()
         
     }
 
+    public function share(Request $request)
+    {
+        $request->validate([
+            'document_id' => 'required|exists:documents,id',
+            'user_ids' => 'required|array',
+            'user_ids.*' => 'exists:users,id',
+        ]);
 
+        $document = Document::findOrFail($request->document_id);
 
+        $document->sharedWith()->syncWithoutDetaching($request->user_ids);
+
+        return redirect()->route('admin.documents.index')->with('success', 'Document partagé avec succès.');
+    }
+
+    public function partagerMultiple(Request $request)
+    {
+
+        $documentIds = $request->input('document_ids', []);
+        $userIds = $request->input('user_ids', []);
+
+        $documents = Document::whereIn('id', $documentIds)->get();
+        $users = User::whereIn('id', $userIds)->get();
+
+        foreach ($documents as $document) {
+            // Synchronisation sans supprimer les anciens partages
+            $document->sharedWith()->syncWithoutDetaching($userIds);
+
+            // Notification aux utilisateurs
+            foreach ($users as $user) {
+                $user->notify(new DocumentPartage($document));
+            }
+        }
+
+        return redirect()->back()->with('success', '📤 Documents partagés avec succès !');
+    }
+
+    public function archiver(Document $document)
+    {
+        $document->update(['archived' => true]);
+        return back()->with('success', '📦 Document archivé avec succès.');
+    }
+
+    public function restaurer(Document $document)
+    {
+        $document->update(['archived' => false]);
+        return redirect()->route('admin.documents.index')->with('success', '🔓 Document restauré avec succès.');
+    }
+
+    public function shareMultiple(){
+        $documents = Document::query();
+
+            if ($search = request('search')) {
+                $documents->where('title', 'like', '%' . $search . '%');
+            }
+        $documents = $documents->latest()->paginate(15);
+        $users = User::all();
+        return view('admin.documents.multiple',compact('documents','users'));
+    }
 }

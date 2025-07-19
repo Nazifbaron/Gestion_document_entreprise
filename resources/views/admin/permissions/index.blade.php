@@ -8,6 +8,19 @@
             Ajouter une permission
         </a>
 
+        @if(session('success'))
+            <script>
+                document.addEventListener('DOMContentLoaded',function(){
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Succès',
+                        text: '{{ session('success')}}',
+                        confirmButtonColor: '#3085d6',
+                        confirmButtonText: 'OK'
+                    })
+                });
+            </script>
+        @endif
         <table class="min-w-full mt-6 bg-white shadow rounded">
             <thead>
                 <tr>

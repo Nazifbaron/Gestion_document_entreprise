@@ -8,7 +8,10 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\Admin\CategoryController;
+
 
 
 Route::get('/', function () {
@@ -43,6 +46,8 @@ Route::middleware(['auth', 'role:admin'])
     ->name('admin.')
     ->group(function () {
         Route::resource('documents', DocumentController::class)->except(['show']);
+        Route::get('documents/{document}/preview', [DocumentController::class, 'preview'])
+        ->name('documents.preview');
         Route::get('documents/{document}/telecharger', [DocumentController::class, 'telecharger'])
         ->name('documents.telecharger');
         Route::get('documents/statistiques', [DocumentController::class, 'statistiques'])
@@ -52,6 +57,20 @@ Route::middleware(['auth', 'role:admin'])
         Route::get('documents/versions/{version}/download', [DocumentController::class, 'downloadVersion'])->name('documents.versions.download');
         Route::post(' documents/versions/{version}/restore', [DocumentController::class, 'restoreVersion'])->name('documents.versions.restore');
         Route::delete('/documents/versions/{version}', [DocumentController::class, 'deleteVersion'])->name('documents.versions.destroy');
+        Route::post('/documents/partager', [DocumentController::class, 'share'])->name('documents.share');
+        Route::get('/documents/partager', [DocumentController::class, 'shareMultiple'])->name('documents.shareMultiple');
+        Route::post('/documents/partager-multiple', [DocumentController::class, 'partagerMultiple'])->name('documents.partager.multiple');
+        Route::patch('documents/{document}/archiver', [DocumentController::class, 'archiver'])->name('documents.archive');
+        Route::patch('documents/{document}/restaurer', [DocumentController::class, 'restaurer'])->name('documents.restore');
+        Route::post('/notifications/{id}/read', function ($id, Request $request) {
+            $notification = $request->user()->notifications()->findOrFail($id);
+            $notification->markAsRead();
+            return back();
+        })->name('notifications.read');
+        Route::post('/notifications/read-all', function (Request $request) {
+            $request->user()->unreadNotifications->markAsRead();
+            return back();
+        })->name('notifications.readAll');
     });
 
     Route::middleware(['auth', 'role:admin|responsable'])
@@ -64,6 +83,9 @@ Route::middleware(['auth', 'role:admin'])
         Route::patch('/documents/{document}/valider', [DocumentController::class, 'valider'])->name('documents.valider');
         Route::patch('/documents/{document}/rejeter', [DocumentController::class, 'rejeter'])->name('documents.rejeter');
         
+
+        Route::resource('categories', CategoryController::class)->names('categories')->except(['show']);
+
      });
 
    

@@ -47,4 +47,10 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    public function sharedDocuments()
+    {
+        return $this->belongsToMany(Document::class, 'document_user')->withTimestamps();
+    }
+
 }
