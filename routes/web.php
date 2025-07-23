@@ -46,7 +46,7 @@ Route::middleware(['auth', 'role:admin'])
     ->name('admin.')
     ->group(function () {
         Route::resource('documents', DocumentController::class)->except(['show']);
-        Route::get('documents/{document}/preview', [DocumentController::class, 'preview'])
+       Route::get('documents/{document}/preview', [DocumentController::class, 'preview'])
         ->name('documents.preview');
         Route::get('documents/{document}/telecharger', [DocumentController::class, 'telecharger'])
         ->name('documents.telecharger');

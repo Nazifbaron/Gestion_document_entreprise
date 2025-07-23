@@ -5,27 +5,32 @@
 
     <div class="py-6  ">
         <div class="flex justify-between mb-4 ml-2">
-            <div class="relative inline-block text-left">
-                <button id="dropdownButton" type="button" class="inline-flex justify-center w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none">
-                    📁 Ajouter
-                    <svg class="-mr-1 ml-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                </button>
-
-                <div id="dropdownMenu" class="hidden absolute right-0 z-10 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5">
-                    <div class="py-1" role="menu" aria-orientation="vertical" aria-labelledby="dropdownButton">
-                        <a href="{{ route('admin.documents.create') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">➕ Document</a>
-                        <a href="{{ route('admin.folders.index') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">📂 Dossier</a>
-                        <a href="{{ route('admin.categories.index') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">🏷️ Département</a>
-                    </div>
-                </div>
-            </div>
+        
+    
             <div class="mr-3">
                 <a href="{{ route('admin.documents.historique') }}" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
                     Historique
                 </a>
             </div>
+            <div x-data="{ open: false }" class="relative inline-block text-left mr-3">
+                <button @click="open = !open"
+                    class="inline-flex justify-center w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    📁 Ajouter
+                    <svg class="-mr-1 ml-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+
+                <div x-show="open" @click.away="open = false" x-transition
+                    class="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
+                    <div class="py-1">
+                        <a href="{{ route('admin.documents.create') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">➕ Document</a>
+                        <a href="{{ route('admin.folders.index') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">📂 Dossier</a>
+                        <a href="{{ route('admin.categories.index') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">🏷️ Département</a>
+                    </div>
+                </div>
+        </div>
         </div>
 
         <div class=" flex justify-between items-center ml-2">
@@ -133,7 +138,10 @@
                                             🗑️</button>
                                     </form>
                                 @endcan
-                                <a href="{{ route('admin.documents.preview', $document) }}" target="_blank" class="text-blue-600 hover:underline">👁️ Voir</a>
+                                <a href="{{ asset('storage/' . $document->file_path) }}" target="_blank" class="text-blue-600 hover:underline">
+                                    👁️ Voir
+                                </a>
+                                <!--<a href="{{ route('admin.documents.preview', $document) }}" target="_blank" class="text-blue-600 hover:underline">👁️ Voir</a>-->
                                 <a href="{{ route('admin.documents.telecharger', $document) }}" class="bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600">
                                 ⬇️
                                 Télécharger

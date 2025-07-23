@@ -1,6 +1,6 @@
 <x-guest-layout>
     <div class="min-h-screen flex flex-col justify-center items-center bg-gray-100 px-6">
-        <h1 class="text-4xl font-bold text-gray-800 mb-4">Gestion de documents</h1>
+        <h1 class="text-4xl font-bold text-center text-gray-800 mb-4">Gestion de documents</h1>
         <p class="text-gray-600 mb-6 text-center max-w-xl">
             Une application interne pour gérer, stocker et organiser les documents de votre entreprise de manière sécurisée et efficace.
         </p>

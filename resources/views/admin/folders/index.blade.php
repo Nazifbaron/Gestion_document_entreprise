@@ -45,7 +45,12 @@
                         <td class="px-6 py-4">{{ $folder->description }}</td>
                         <td class="px-6 py-4 text-center flex gap-2 justify-center">
                             <a href="{{ route('admin.folders.edit', $folder) }}"><x-primary-button>Modifier</x-primary-button> </a>
-                            <form action="{{ route('admin.folders.destroy', $folder) }}" method="POST" onsubmit="return confirm('Supprimer ce dossier ?')">
+                            <!--<form action="{{ route('admin.folders.destroy', $folder) }}" method="POST" onsubmit="return confirm('Supprimer ce dossier ?')">
+                                @csrf @method('DELETE')
+                                <x-danger-button>Supprimer</x-danger-button>
+                            </form>-->
+
+                            <form action="{{ route('admin.folders.destroy', $folder) }}" method="POST" class="delete-form">
                                 @csrf @method('DELETE')
                                 <x-danger-button>Supprimer</x-danger-button>
                             </form>

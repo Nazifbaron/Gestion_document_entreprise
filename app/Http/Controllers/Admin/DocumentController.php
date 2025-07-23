@@ -217,13 +217,28 @@ class DocumentController extends Controller
         return redirect()->route('admin.documents.index')->with('success', 'Document supprimé avec succès.');
     }
 
-    public function preview(Document $document)
-    {
-        // Génère l’URL publique vers le fichier (stocké dans storage/app/public)
-        $url = asset('storage/' . $document->file_path);
 
-        return view('admin.documents.preview', compact('document', 'url'));
+   /* public function preview(Document $document)
+    {
+        $fileUrl = asset('storage/' . $document->file_path);
+    
+        $ext = pathinfo($document->file_path, PATHINFO_EXTENSION);
+    
+        // Extensions supportées par Google Docs Viewer
+        $extensionsSupportées = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'odt', 'xls', 'xlsx', 'txt'];
+    
+        if (in_array($ext, $extensionsSupportées)) {
+            $viewerUrl = "https://docs.google.com/viewer?url=" . urlencode($fileUrl) . "&embedded=true";
+        } else {
+            $viewerUrl = $fileUrl;
+        }
+    
+        return view('admin.documents.preview', [
+            'document' => $document,
+            'url' => $viewerUrl,
+        ]);
     }
+    */
 
 
     public function telecharger(Document $document)
